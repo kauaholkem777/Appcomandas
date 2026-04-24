@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Sistema Gestor de Lanchonetes</title>
+    <title>ComandaPro - Gestão Ágil</title>
     <style>
         :root {
             --bg: #0b1120;
@@ -50,7 +50,7 @@
         .modal-content input { width: 100%; padding: 14px; margin: 8px 0; border-radius: 12px; border: 1px solid #334155; background: #0f172a; color: white; box-sizing: border-box; }
         .btn-menu { width: 100%; height: 48px; margin-bottom: 10px; border-radius: 12px; border: none; font-weight: 800; cursor: pointer; }
 
-        /* IMPRESSÃO TÉRMICA */
+        /* IMPRESSÃO TÉRMICA OTIMIZADA */
         .print-area { background: white; color: black; width: 280px; margin: auto; font-family: 'Courier New', Courier, monospace; }
         .ticket-header { text-align: center; margin-bottom: 8px; }
         .ticket-id { font-size: 30px; font-weight: 900; margin: 0; }
@@ -65,7 +65,8 @@
         @media print {
             body * { visibility: hidden; }
             .print-area, .print-area * { visibility: visible; }
-            .print-area { position: absolute; left: 0; top: 0; width: 100%; }
+            .print-area { position: absolute; left: 0; top: 0; width: 100%; margin: 0; padding: 0; }
+            @page { margin: 0; }
         }
     </style>
 </head>
@@ -76,8 +77,8 @@
         <div class="brand-area">
             <img id="appLogoMain" src="" alt="Logo">
             <div class="brand-text">
-                <h1 id="appNameDisplay">MINHA LANCHONETE</h1>
-                <span id="appSubDisplay">SISTEMA PRO</span>
+                <h1 id="appNameDisplay">COMANDAPRO</h1>
+                <span id="appSubDisplay">SISTEMA DE GESTÃO</span>
             </div>
         </div>
         <button class="btn-icon" style="font-size: 24px;" onclick="openSettings()">⚙️</button>
@@ -112,7 +113,7 @@
     <div class="header"><button class="btn-icon" onclick="showScreen('viewOrder')">← VOLTAR</button></div>
     <div class="container">
         <div id="printArea" class="print-area"></div>
-        <button onclick="window.print()" style="width:100%; padding:20px; background:var(--primary); color:black; margin-top:15px; border-radius:15px; font-weight:900; border:none;">IMPRIMIR COMANDAS</button>
+        <button onclick="dispararImpressao()" style="width:100%; padding:20px; background:var(--primary); color:black; margin-top:15px; border-radius:15px; font-weight:900; border:none;">SOLTAR IMPRESSÃO</button>
     </div>
 </div>
 
@@ -143,12 +144,12 @@ let db = {
     ], 
     next: 1, 
     vendasDia: [], 
-    config: { name: "RAFAEL LANCHES", sub: "GESTOR DE VENDAS", logo: "" } 
+    config: { name: "COMANDAPRO", sub: "GESTOR DE VENDAS", logo: "" } 
 };
 
-function save(){ localStorage.setItem("sys_v25_final", JSON.stringify(db)); }
+function save(){ localStorage.setItem("sys_v26_final", JSON.stringify(db)); }
 function load(){
-    const data = JSON.parse(localStorage.getItem("sys_v25_final"));
+    const data = JSON.parse(localStorage.getItem("sys_v26_final"));
     if(data) db = data;
     updateUI();
     renderHome();
@@ -158,6 +159,11 @@ function updateUI(){
     document.getElementById('appNameDisplay').innerText = db.config.name;
     const logoImg = document.getElementById('appLogoMain');
     if(db.config.logo) { logoImg.src = db.config.logo; logoImg.style.display = 'block'; }
+}
+
+// FUNÇÃO PARA IMPRESSÃO SEM PERGUNTA (MODO KIOSK)
+function dispararImpressao() {
+    window.print();
 }
 
 function showScreen(id){
@@ -181,7 +187,7 @@ function openM(title, html, onConfirm, showConfirm = true) {
 function openSettings(){
     const html = `
         <button class="btn-menu" style="background:#38bdf8; color:black" onclick="closeM(); showScreen('viewMenuConfig');">📓 EDITAR CARDÁPIO</button>
-        <button class="btn-menu" style="background:#2ecc71; color:white" onclick="modalAppEdit()">✏️ EDITAR EMPRESA/LOGO</button>
+        <button class="btn-menu" style="background:#2ecc71; color:white" onclick="modalAppEdit()">✏️ EDITAR NOME/LOGO</button>
         <button class="btn-menu" style="background:#f5d90a; color:black" onclick="showRelatorio()">📊 VENDAS DO DIA</button>
         <button class="btn-menu" style="background:#ef4444; color:white" onclick="clearAll()">🧹 RESETAR TUDO</button>
     `;
@@ -189,9 +195,9 @@ function openSettings(){
 }
 
 function modalAppEdit(){
-    openM("DADOS DO APP", `
-        <input id="newAN" value="${db.config.name}" placeholder="Nome da Empresa">
-        <button class="btn-menu" style="background:#fff; color:#000; margin-top:10px" onclick="document.getElementById('logoIn').click()">📷 SELECIONAR LOGO</button>
+    openM("DADOS DA EMPRESA", `
+        <input id="newAN" value="${db.config.name}" placeholder="Nome do Local">
+        <button class="btn-menu" style="background:#fff; color:#000; margin-top:10px" onclick="document.getElementById('logoIn').click()">📷 MUDAR LOGO</button>
         <input type="file" id="logoIn" class="hidden" onchange="changeLogo(this)">
     `, () => {
         db.config.name = document.getElementById('newAN').value;

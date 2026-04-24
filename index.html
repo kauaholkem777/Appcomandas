@@ -1,0 +1,356 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sistema Gestor de Lanchonetes</title>
+    <style>
+        :root {
+            --bg: #0b1120;
+            --card: rgba(30, 41, 59, 0.7);
+            --primary: #38bdf8;
+            --accent: #f5d90a;
+            --text: #f8fafc;
+        }
+
+        body { 
+            background: var(--bg); color: var(--text); font-family: 'Segoe UI', sans-serif; 
+            margin:0; background-size: cover; background-position: center; background-attachment: fixed;
+        }
+        
+        .header { 
+            padding: 15px 20px; background: rgba(15, 23, 42, 0.8);
+            border-bottom: 2px solid var(--primary); position: sticky; top: 0; z-index: 50;
+            display: flex; align-items: center; justify-content: space-between; backdrop-filter: blur(12px);
+        }
+
+        #appLogoMain { max-height: 50px; margin-right: 12px; border-radius: 8px; display: none; }
+        .brand-area { display: flex; align-items: center; }
+        .brand-text h1 { margin: 0; font-size: 18px; font-weight: 900; text-transform: uppercase; }
+
+        .container { padding: 15px; max-width: 600px; margin: auto; }
+
+        .card { 
+            background: var(--card); padding: 16px; margin-bottom: 12px; border-radius: 18px; 
+            display: flex; justify-content: space-between; align-items: center; 
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3); border: 1px solid rgba(255,255,255,0.08);
+        }
+        
+        .btn-icon { background: rgba(255,255,255,0.1); border: none; border-radius: 12px; padding: 10px; color: white; cursor: pointer; }
+
+        .fab { 
+            position:fixed; bottom:25px; right:25px; width:65px; height:65px; border-radius:22px; 
+            font-size:35px; background: var(--primary); color: #000; border:none; z-index: 40; display: flex; align-items: center; justify-content: center;
+        }
+
+        .hidden { display:none !important; }
+
+        .modal-overlay { position:fixed; top:0; left:0; width:100%; height:100%; background: rgba(0, 0, 0, 0.9); display:flex; justify-content:center; align-items:center; z-index:1000; backdrop-filter: blur(10px); }
+        .modal-content { background: #1e293b; padding: 25px; border-radius: 28px; width: 88%; max-width: 360px; border: 1.5px solid var(--primary); color: white; text-align: center; }
+        .modal-content input { width: 100%; padding: 14px; margin: 8px 0; border-radius: 12px; border: 1px solid #334155; background: #0f172a; color: white; box-sizing: border-box; }
+        .btn-menu { width: 100%; height: 48px; margin-bottom: 10px; border-radius: 12px; border: none; font-weight: 800; cursor: pointer; }
+
+        /* IMPRESSÃO TÉRMICA */
+        .print-area { background: white; color: black; width: 280px; margin: auto; font-family: 'Courier New', Courier, monospace; }
+        .ticket-header { text-align: center; margin-bottom: 8px; }
+        .ticket-id { font-size: 30px; font-weight: 900; margin: 0; }
+        .ticket-client-name { font-size: 18px; text-transform: uppercase; margin: 2px 0; }
+        
+        .ticket-cozinha { border: 2px solid #000; padding: 10px; margin-bottom: 40px; }
+        .item-pista { font-size: 18px; font-weight: bold; margin-top: 8px; border-top: 1px solid #eee; padding-top: 5px; }
+        .obs-box { background: #e0e0e0; padding: 4px; margin-top: 2px; font-size: 15px; display: block; border-radius: 3px; }
+
+        .ticket-cliente { border-top: 1px dashed #000; padding: 10px; }
+
+        @media print {
+            body * { visibility: hidden; }
+            .print-area, .print-area * { visibility: visible; }
+            .print-area { position: absolute; left: 0; top: 0; width: 100%; }
+        }
+    </style>
+</head>
+<body>
+
+<div id="viewHome">
+    <div class="header">
+        <div class="brand-area">
+            <img id="appLogoMain" src="" alt="Logo">
+            <div class="brand-text">
+                <h1 id="appNameDisplay">MINHA LANCHONETE</h1>
+                <span id="appSubDisplay">SISTEMA PRO</span>
+            </div>
+        </div>
+        <button class="btn-icon" style="font-size: 24px;" onclick="openSettings()">⚙️</button>
+    </div>
+    <div class="container" id="listComandas"></div>
+    <button class="fab" onclick="modalName()">+</button>
+</div>
+
+<div id="viewOrder" class="hidden">
+    <div class="header">
+        <button class="btn-icon" onclick="showScreen('viewHome')">←</button>
+        <span id="titleOrder" style="font-weight:900;"></span>
+        <button class="btn-icon" style="background:var(--primary); color:black" onclick="modalPrint()">🖨️</button>
+    </div>
+    <div class="container" id="listOrder"></div>
+    <div class="container"><div class="card" style="border: 1.5px solid var(--primary)"><b>TOTAL:</b><span style="font-weight: 900; color:var(--accent); font-size:22px">R$ <span id="valTotal">0.00</span></span></div></div>
+    <button class="fab" onclick="showScreen('viewItems')">+</button>
+</div>
+
+<div id="viewItems" class="hidden">
+    <div class="header"><button class="btn-icon" onclick="showScreen('viewOrder')">←</button><b>ADICIONAR ITEM</b></div>
+    <div class="container" id="listItems"></div>
+</div>
+
+<div id="viewMenuConfig" class="hidden">
+    <div class="header"><button class="btn-icon" onclick="showScreen('viewHome')">←</button><b>CARDÁPIO</b></div>
+    <div class="container" id="listMenuConfig"></div>
+    <button class="fab" onclick="modalProduct()">+</button>
+</div>
+
+<div id="viewPrint" class="hidden">
+    <div class="header"><button class="btn-icon" onclick="showScreen('viewOrder')">← VOLTAR</button></div>
+    <div class="container">
+        <div id="printArea" class="print-area"></div>
+        <button onclick="window.print()" style="width:100%; padding:20px; background:var(--primary); color:black; margin-top:15px; border-radius:15px; font-weight:900; border:none;">IMPRIMIR COMANDAS</button>
+    </div>
+</div>
+
+<div id="modal" class="modal-overlay hidden">
+    <div class="modal-content">
+        <h3 id="mTitle"></h3>
+        <div id="mBody"></div>
+        <div id="mFooter" style="display:flex; gap:10px; margin-top:20px;">
+            <button class="btn-menu" style="background:#475569; color:white; flex:1" onclick="closeM()">VOLTAR</button>
+            <button class="btn-menu" style="background:var(--primary); color:black; flex:1" id="mConfirm">OK</button>
+        </div>
+    </div>
+</div>
+
+<script>
+let db = { 
+    comandas: [], 
+    produtos: [
+        {nome: "X COMPLETO", valor: 25.00},
+        {nome: "X FRANGO", valor: 22.00},
+        {nome: "X CORAÇÃO", valor: 28.00},
+        {nome: "X CALABRESA", valor: 24.00},
+        {nome: "X-BACON", valor: 27.00},
+        {nome: "DOG ESTUFA", valor: 12.00},
+        {nome: "COCA-COLA LATA", valor: 6.00},
+        {nome: "COCA-COLA 600", valor: 9.00},
+        {nome: "COCA-COLA 2 L", valor: 15.00}
+    ], 
+    next: 1, 
+    vendasDia: [], 
+    config: { name: "RAFAEL LANCHES", sub: "GESTOR DE VENDAS", logo: "" } 
+};
+
+function save(){ localStorage.setItem("sys_v25_final", JSON.stringify(db)); }
+function load(){
+    const data = JSON.parse(localStorage.getItem("sys_v25_final"));
+    if(data) db = data;
+    updateUI();
+    renderHome();
+}
+
+function updateUI(){
+    document.getElementById('appNameDisplay').innerText = db.config.name;
+    const logoImg = document.getElementById('appLogoMain');
+    if(db.config.logo) { logoImg.src = db.config.logo; logoImg.style.display = 'block'; }
+}
+
+function showScreen(id){
+    document.querySelectorAll('[id^="view"]').forEach(v => v.classList.add('hidden'));
+    document.getElementById(id).classList.remove('hidden');
+    if(id === 'viewHome') renderHome();
+    if(id === 'viewItems') renderAddList();
+    if(id === 'viewMenuConfig') renderMenuConfig();
+}
+
+function closeM(){ document.getElementById("modal").classList.add("hidden"); }
+function openM(title, html, onConfirm, showConfirm = true) {
+    document.getElementById("mTitle").innerText = title;
+    document.getElementById("mBody").innerHTML = html;
+    document.getElementById("modal").classList.remove("hidden");
+    const btn = document.getElementById("mConfirm");
+    if(showConfirm) { btn.classList.remove("hidden"); btn.onclick = () => { if(onConfirm) onConfirm(); closeM(); }; }
+    else btn.classList.add("hidden");
+}
+
+function openSettings(){
+    const html = `
+        <button class="btn-menu" style="background:#38bdf8; color:black" onclick="closeM(); showScreen('viewMenuConfig');">📓 EDITAR CARDÁPIO</button>
+        <button class="btn-menu" style="background:#2ecc71; color:white" onclick="modalAppEdit()">✏️ EDITAR EMPRESA/LOGO</button>
+        <button class="btn-menu" style="background:#f5d90a; color:black" onclick="showRelatorio()">📊 VENDAS DO DIA</button>
+        <button class="btn-menu" style="background:#ef4444; color:white" onclick="clearAll()">🧹 RESETAR TUDO</button>
+    `;
+    openM("CONFIGURAÇÕES", html, null, false);
+}
+
+function modalAppEdit(){
+    openM("DADOS DO APP", `
+        <input id="newAN" value="${db.config.name}" placeholder="Nome da Empresa">
+        <button class="btn-menu" style="background:#fff; color:#000; margin-top:10px" onclick="document.getElementById('logoIn').click()">📷 SELECIONAR LOGO</button>
+        <input type="file" id="logoIn" class="hidden" onchange="changeLogo(this)">
+    `, () => {
+        db.config.name = document.getElementById('newAN').value;
+        updateUI(); save();
+    });
+}
+
+function changeLogo(input){
+    if (input.files && input.files[0]) {
+        let reader = new FileReader();
+        reader.onload = (e) => { db.config.logo = e.target.result; updateUI(); save(); };
+        reader.readAsDataURL(input.files[0]);
+    }
+}
+
+function renderHome(){
+    const list = document.getElementById("listComandas"); list.innerHTML = "";
+    db.comandas.forEach((c, i) => {
+        let t = c.itens.reduce((acc, it) => acc + (it.valor * it.qtd), 0);
+        list.innerHTML += `<div class="card">
+            <div onclick="openOrder(${i})" style="flex:1">
+                <small style="color:var(--primary)">P-Nº ${c.numero}</small><br><b>${c.nome}</b>
+            </div>
+            <div style="display:flex; gap:10px; align-items:center">
+                <b>R$ ${t.toFixed(2)}</b>
+                <button class="btn-icon" onclick="modalName(${i})">✏️</button>
+            </div>
+        </div>`;
+    });
+}
+
+function modalName(idx = null){
+    const nome = idx !== null ? db.comandas[idx].nome : "";
+    openM(idx !== null ? "EDITAR" : "NOVA COMANDA", `<input id="inNome" value="${nome}" placeholder="Nome do cliente">`, () => {
+        let n = document.getElementById("inNome").value; if(!n) return;
+        if(idx !== null) db.comandas[idx].nome = n;
+        else db.comandas.push({ nome: n, numero: String(db.next++).padStart(3,'0'), itens: [] });
+        save(); renderHome();
+    });
+}
+
+function openOrder(i){ cur = i; showScreen('viewOrder'); document.getElementById("titleOrder").innerText = db.comandas[i].nome; renderOrder(); }
+function renderOrder(){
+    let c = db.comandas[cur], ped = document.getElementById("listOrder"), total = 0; ped.innerHTML = "";
+    c.itens.forEach((it, i) => {
+        total += it.valor * it.qtd;
+        ped.innerHTML += `<div class="card">
+            <div style="flex:1"><b>${it.qtd}x ${it.nome}</b><br><small style="color:var(--primary)">${it.obs || ""}</small></div>
+            <div style="display:flex; gap:5px">
+                <button class="btn-icon" onclick="qtdChange(${i},1)">+</button>
+                <button class="btn-icon" onclick="qtdChange(${i},-1)">-</button>
+                <button class="btn-icon" onclick="modalObs(${i})">💬</button>
+            </div>
+        </div>`;
+    });
+    document.getElementById("valTotal").innerText = total.toFixed(2);
+}
+
+function qtdChange(i, n){ db.comandas[cur].itens[i].qtd += n; if(db.comandas[cur].itens[i].qtd <= 0) db.comandas[cur].itens.splice(i,1); save(); renderOrder(); }
+function modalObs(idx){ openM("OBS", `<input id="inObs" value="${db.comandas[cur].itens[idx].obs || ''}">`, () => { db.comandas[cur].itens[idx].obs = document.getElementById("inObs").value; save(); renderOrder(); }); }
+
+function renderAddList(){
+    const lp = document.getElementById("listItems"); lp.innerHTML = "";
+    db.produtos.forEach((p, i) => { lp.innerHTML += `<div class="card" onclick="addItem(${i})"><b>${p.nome}</b> <b>R$ ${p.valor.toFixed(2)}</b></div>`; });
+}
+function addItem(i){ db.comandas[cur].itens.push({...db.produtos[i], qtd:1, obs:""}); save(); showScreen('viewOrder'); renderOrder(); }
+
+function modalPrint(){
+    openM("FINALIZAR", `
+        <input type="number" id="taxaEnt" placeholder="Taxa de Entrega" value="0">
+        <button class="btn-menu" style="background:var(--primary); color:black" onclick="genTicket('PARA COMER AQUI')">PARA COMER AQUI</button>
+        <button class="btn-menu" style="background:var(--accent); color:black" onclick="genTicket('PARA LEVAR')">PARA LEVAR</button>
+    `, null, false);
+}
+
+function genTicket(modo){
+    const taxa = parseFloat(document.getElementById('taxaEnt').value) || 0;
+    const agora = new Date().toLocaleString('pt-BR');
+    closeM(); 
+    let c = db.comandas[cur], tot = 0, cozHtml = "", cliHtml = "";
+    
+    c.itens.forEach(it => { 
+        tot += it.valor * it.qtd;
+        db.vendasDia.push({...it});
+        cozHtml += `<div class="item-pista">${it.qtd}x ${it.nome} ${it.obs ? `<span class="obs-box">OBS: ${it.obs.toUpperCase()}</span>` : ""}</div>`;
+        cliHtml += `<div style="display:flex; justify-content:space-between"><span>${it.qtd}x ${it.nome}</span><span>R$ ${(it.valor * it.qtd).toFixed(2)}</span></div>`;
+    });
+
+    document.getElementById("printArea").innerHTML = `
+        <div class="ticket-cozinha">
+            <div class="ticket-header">
+                <p class="ticket-id">P-Nº ${c.numero}</p>
+                <p class="ticket-client-name">NOME: ${c.nome}</p>
+                <div style="border: 1px solid #000; font-weight: bold;">${modo}</div>
+            </div>
+            <div style="text-align:center; font-weight:bold; font-size:12px; margin-bottom:5px;">VIA PRODUÇÃO</div>
+            ${cozHtml}
+            <div style="text-align:right; font-size:18px; margin-top:15px; border-top: 1px solid #000;">
+                <b>TOTAL: R$ ${(tot+taxa).toFixed(2)}</b>
+            </div>
+        </div>
+
+        <div class="ticket-cliente">
+            <div style="text-align:center">
+                ${db.config.logo ? `<img src="${db.config.logo}" style="max-height:50px;"><br>` : ""}
+                <b style="font-size:18px">${db.config.name}</b><br>
+                <span>${agora}</span>
+            </div>
+            <div style="margin:10px 0; border-bottom:1px dashed #000"></div>
+            <div class="ticket-header">
+                <p class="ticket-id">P-Nº ${c.numero}</p>
+                <p class="ticket-client-name">NOME: ${c.nome}</p>
+            </div>
+            ${cliHtml}
+            <div style="text-align:right; margin-top:10px; border-top:1px solid #eee; padding-top:5px;">
+                Subtotal: R$ ${tot.toFixed(2)}<br>
+                ${taxa > 0 ? `Entrega: R$ ${taxa.toFixed(2)}<br>` : ""}
+                <b style="font-size:18px">TOTAL: R$ ${(tot+taxa).toFixed(2)}</b>
+            </div>
+            <div style="text-align:center; margin-top:15px; font-size:12px">
+                <b>${db.config.name} AGRADECE!</b><br>
+                SEU PEDIDO FICARÁ PRONTO EM INSTANTES.
+            </div>
+        </div>
+    `;
+    save(); showScreen('viewPrint');
+}
+
+function renderMenuConfig(){
+    const list = document.getElementById("listMenuConfig"); list.innerHTML = "";
+    db.produtos.forEach((p, i) => {
+        list.innerHTML += `<div class="card">
+            <div style="flex:1"><b>${p.nome}</b><br><small>R$ ${p.valor.toFixed(2)}</small></div>
+            <div style="display:flex; gap:10px">
+                <button class="btn-icon" onclick="modalProduct(${i})">✏️</button>
+                <button class="btn-icon" style="color:#ef4444" onclick="db.produtos.splice(${i},1); save(); renderMenuConfig();">🗑️</button>
+            </div>
+        </div>`;
+    });
+}
+function modalProduct(idx = null){
+    const p = idx !== null ? db.produtos[idx] : {nome:"", valor:""};
+    openM("PRODUTO", `<input id="pN" value="${p.nome}" placeholder="Nome"><input id="pV" type="number" value="${p.valor}" placeholder="Preço">`, () => {
+        let n = document.getElementById("pN").value; let v = parseFloat(document.getElementById("pV").value);
+        if(n && v){ if(idx!==null) db.produtos[idx]={nome:n.toUpperCase(), valor:v}; else db.produtos.push({nome:n.toUpperCase(), valor:v}); save(); renderMenuConfig(); }
+    });
+}
+
+function showRelatorio(){
+    let t = db.vendasDia.reduce((a, b) => a + (b.valor * b.qtd), 0);
+    let h = `<div style="text-align:left">`;
+    db.vendasDia.forEach(v => h += `<p>${v.qtd}x ${v.nome} - R$ ${(v.valor*v.qtd).toFixed(2)}</p>`);
+    h += `<hr><h3>TOTAL: R$ ${t.toFixed(2)}</h3></div>`;
+    openM("VENDAS DO DIA", h, null, false);
+}
+
+function clearAll(){ closeM(); openM("RESETAR TUDO?", "Deseja apagar comandas e vendas?", () => { db.comandas=[]; db.vendasDia=[]; db.next=1; save(); renderHome(); }); }
+
+load();
+</script>
+</body>
+</html>

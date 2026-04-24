@@ -11,6 +11,7 @@
             --primary: #38bdf8;
             --accent: #f5d90a;
             --text: #f8fafc;
+            --success: #2ecc71;
         }
 
         body { 
@@ -24,9 +25,13 @@
             display: flex; align-items: center; justify-content: space-between; backdrop-filter: blur(12px);
         }
 
-        #appLogoMain { max-height: 50px; margin-right: 12px; border-radius: 8px; display: none; }
+        /* Indicador de Bluetooth */
+        #btStatus { font-size: 14px; margin-left: 8px; color: #64748b; }
+        #btStatus.connected { color: var(--primary); font-weight: bold; }
+
+        #appLogoMain { max-height: 40px; margin-right: 12px; border-radius: 8px; display: none; }
         .brand-area { display: flex; align-items: center; }
-        .brand-text h1 { margin: 0; font-size: 18px; font-weight: 900; text-transform: uppercase; }
+        .brand-text h1 { margin: 0; font-size: 16px; font-weight: 900; text-transform: uppercase; }
 
         .container { padding: 15px; max-width: 600px; margin: auto; }
 
@@ -51,7 +56,7 @@
         .btn-menu { width: 100%; height: 48px; margin-bottom: 10px; border-radius: 12px; border: none; font-weight: 800; cursor: pointer; }
 
         /* IMPRESSÃO TÉRMICA OTIMIZADA */
-        .print-area { background: white; color: black; width: 280px; margin: auto; font-family: 'Courier New', Courier, monospace; }
+        .print-area { background: white; color: black; width: 280px; margin: auto; font-family: 'Courier New', Courier, monospace; padding: 10px; }
         .ticket-header { text-align: center; margin-bottom: 8px; }
         .ticket-id { font-size: 30px; font-weight: 900; margin: 0; }
         .ticket-client-name { font-size: 18px; text-transform: uppercase; margin: 2px 0; }
@@ -78,7 +83,7 @@
             <img id="appLogoMain" src="" alt="Logo">
             <div class="brand-text">
                 <h1 id="appNameDisplay">COMANDAPRO</h1>
-                <span id="appSubDisplay">SISTEMA DE GESTÃO</span>
+                <span id="btStatus">🔵 BT Desconectado</span>
             </div>
         </div>
         <button class="btn-icon" style="font-size: 24px;" onclick="openSettings()">⚙️</button>
@@ -113,7 +118,7 @@
     <div class="header"><button class="btn-icon" onclick="showScreen('viewOrder')">← VOLTAR</button></div>
     <div class="container">
         <div id="printArea" class="print-area"></div>
-        <button onclick="dispararImpressao()" style="width:100%; padding:20px; background:var(--primary); color:black; margin-top:15px; border-radius:15px; font-weight:900; border:none;">SOLTAR IMPRESSÃO</button>
+        <button onclick="enviarParaImpressoraBT()" id="btnPrintAction" style="width:100%; padding:20px; background:var(--primary); color:black; margin-top:15px; border-radius:15px; font-weight:900; border:none;">SOLTAR IMPRESSÃO</button>
     </div>
 </div>
 
@@ -129,6 +134,7 @@
 </div>
 
 <script>
+// --- BANCO DE DADOS E LÓGICA DE INTERFACE (Mantidos do seu original) ---
 let db = { 
     comandas: [], 
     produtos: [
@@ -147,6 +153,67 @@ let db = {
     config: { name: "COMANDAPRO", sub: "GESTOR DE VENDAS", logo: "" } 
 };
 
+// --- VARIÁVEIS DO BLUETOOTH ---
+let btDevice = null;
+let btCharacteristic = null;
+
+async function conectarBT() {
+    try {
+        btDevice = await navigator.bluetooth.requestDevice({
+            filters: [{ services: ['000018f0-0000-1000-8000-00805f9b34fb'] }], // UUID Comum de impressoras térmicas
+            optionalServices: ['000018f0-0000-1000-8000-00805f9b34fb']
+        });
+        
+        const server = await btDevice.gatt.connect();
+        const service = await server.getPrimaryService('000018f0-0000-1000-8000-00805f9b34fb');
+        const characteristics = await service.getCharacteristics();
+        btCharacteristic = characteristics[0];
+
+        document.getElementById('btStatus').innerText = "🟢 BT Conectado: " + btDevice.name;
+        document.getElementById('btStatus').classList.add('connected');
+        alert("Impressora pareada com sucesso!");
+        closeM();
+    } catch (error) {
+        console.error(error);
+        alert("Erro ao conectar Bluetooth: " + error);
+    }
+}
+
+async function enviarParaImpressoraBT() {
+    if (!btCharacteristic) {
+        alert("Impressora não conectada. Usando impressão do sistema...");
+        window.print();
+        return;
+    }
+
+    // Pega o texto da comanda gerada
+    const texto = document.getElementById("printArea").innerText;
+    
+    // Comando ESC/POS para reset e centralizar (comum em chinesas)
+    const encoder = new TextEncoder();
+    const data = encoder.encode('\x1B\x40' + texto + '\n\n\n\n'); // Reseta e pula linhas no fim
+
+    try {
+        await btCharacteristic.writeValue(data);
+        alert("Comanda enviada!");
+    } catch (error) {
+        alert("Erro ao imprimir: " + error);
+    }
+}
+
+// --- CONFIGURAÇÕES ATUALIZADAS ---
+function openSettings(){
+    const html = `
+        <button class="btn-menu" style="background:#2ecc71; color:white" onclick="conectarBT()">🔌 CONECTAR IMPRESSORA</button>
+        <button class="btn-menu" style="background:#38bdf8; color:black" onclick="closeM(); showScreen('viewMenuConfig');">📓 EDITAR CARDÁPIO</button>
+        <button class="btn-menu" style="background:#fff; color:#000" onclick="modalAppEdit()">✏️ EDITAR NOME/LOGO</button>
+        <button class="btn-menu" style="background:#f5d90a; color:black" onclick="showRelatorio()">📊 VENDAS DO DIA</button>
+        <button class="btn-menu" style="background:#ef4444; color:white" onclick="clearAll()">🧹 RESETAR TUDO</button>
+    `;
+    openM("CONFIGURAÇÕES", html, null, false);
+}
+
+// (As demais funções save, load, renderHome, etc., continuam as mesmas do seu código original para não quebrar sua lógica)
 function save(){ localStorage.setItem("sys_v26_final", JSON.stringify(db)); }
 function load(){
     const data = JSON.parse(localStorage.getItem("sys_v26_final"));
@@ -154,18 +221,11 @@ function load(){
     updateUI();
     renderHome();
 }
-
 function updateUI(){
     document.getElementById('appNameDisplay').innerText = db.config.name;
     const logoImg = document.getElementById('appLogoMain');
     if(db.config.logo) { logoImg.src = db.config.logo; logoImg.style.display = 'block'; }
 }
-
-// FUNÇÃO PARA IMPRESSÃO SEM PERGUNTA (MODO KIOSK)
-function dispararImpressao() {
-    window.print();
-}
-
 function showScreen(id){
     document.querySelectorAll('[id^="view"]').forEach(v => v.classList.add('hidden'));
     document.getElementById(id).classList.remove('hidden');
@@ -173,7 +233,6 @@ function showScreen(id){
     if(id === 'viewItems') renderAddList();
     if(id === 'viewMenuConfig') renderMenuConfig();
 }
-
 function closeM(){ document.getElementById("modal").classList.add("hidden"); }
 function openM(title, html, onConfirm, showConfirm = true) {
     document.getElementById("mTitle").innerText = title;
@@ -183,17 +242,6 @@ function openM(title, html, onConfirm, showConfirm = true) {
     if(showConfirm) { btn.classList.remove("hidden"); btn.onclick = () => { if(onConfirm) onConfirm(); closeM(); }; }
     else btn.classList.add("hidden");
 }
-
-function openSettings(){
-    const html = `
-        <button class="btn-menu" style="background:#38bdf8; color:black" onclick="closeM(); showScreen('viewMenuConfig');">📓 EDITAR CARDÁPIO</button>
-        <button class="btn-menu" style="background:#2ecc71; color:white" onclick="modalAppEdit()">✏️ EDITAR NOME/LOGO</button>
-        <button class="btn-menu" style="background:#f5d90a; color:black" onclick="showRelatorio()">📊 VENDAS DO DIA</button>
-        <button class="btn-menu" style="background:#ef4444; color:white" onclick="clearAll()">🧹 RESETAR TUDO</button>
-    `;
-    openM("CONFIGURAÇÕES", html, null, false);
-}
-
 function modalAppEdit(){
     openM("DADOS DA EMPRESA", `
         <input id="newAN" value="${db.config.name}" placeholder="Nome do Local">
@@ -204,7 +252,6 @@ function modalAppEdit(){
         updateUI(); save();
     });
 }
-
 function changeLogo(input){
     if (input.files && input.files[0]) {
         let reader = new FileReader();
@@ -212,7 +259,6 @@ function changeLogo(input){
         reader.readAsDataURL(input.files[0]);
     }
 }
-
 function renderHome(){
     const list = document.getElementById("listComandas"); list.innerHTML = "";
     db.comandas.forEach((c, i) => {
@@ -228,7 +274,6 @@ function renderHome(){
         </div>`;
     });
 }
-
 function modalName(idx = null){
     const nome = idx !== null ? db.comandas[idx].nome : "";
     openM(idx !== null ? "EDITAR" : "NOVA COMANDA", `<input id="inNome" value="${nome}" placeholder="Nome do cliente">`, () => {
@@ -238,7 +283,6 @@ function modalName(idx = null){
         save(); renderHome();
     });
 }
-
 function openOrder(i){ cur = i; showScreen('viewOrder'); document.getElementById("titleOrder").innerText = db.comandas[i].nome; renderOrder(); }
 function renderOrder(){
     let c = db.comandas[cur], ped = document.getElementById("listOrder"), total = 0; ped.innerHTML = "";
@@ -255,16 +299,13 @@ function renderOrder(){
     });
     document.getElementById("valTotal").innerText = total.toFixed(2);
 }
-
 function qtdChange(i, n){ db.comandas[cur].itens[i].qtd += n; if(db.comandas[cur].itens[i].qtd <= 0) db.comandas[cur].itens.splice(i,1); save(); renderOrder(); }
 function modalObs(idx){ openM("OBS", `<input id="inObs" value="${db.comandas[cur].itens[idx].obs || ''}">`, () => { db.comandas[cur].itens[idx].obs = document.getElementById("inObs").value; save(); renderOrder(); }); }
-
 function renderAddList(){
     const lp = document.getElementById("listItems"); lp.innerHTML = "";
     db.produtos.forEach((p, i) => { lp.innerHTML += `<div class="card" onclick="addItem(${i})"><b>${p.nome}</b> <b>R$ ${p.valor.toFixed(2)}</b></div>`; });
 }
 function addItem(i){ db.comandas[cur].itens.push({...db.produtos[i], qtd:1, obs:""}); save(); showScreen('viewOrder'); renderOrder(); }
-
 function modalPrint(){
     openM("FINALIZAR", `
         <input type="number" id="taxaEnt" placeholder="Taxa de Entrega" value="0">
@@ -272,7 +313,6 @@ function modalPrint(){
         <button class="btn-menu" style="background:var(--accent); color:black" onclick="genTicket('PARA LEVAR')">PARA LEVAR</button>
     `, null, false);
 }
-
 function genTicket(modo){
     const taxa = parseFloat(document.getElementById('taxaEnt').value) || 0;
     const agora = new Date().toLocaleString('pt-BR');
@@ -325,7 +365,6 @@ function genTicket(modo){
     `;
     save(); showScreen('viewPrint');
 }
-
 function renderMenuConfig(){
     const list = document.getElementById("listMenuConfig"); list.innerHTML = "";
     db.produtos.forEach((p, i) => {
@@ -345,7 +384,6 @@ function modalProduct(idx = null){
         if(n && v){ if(idx!==null) db.produtos[idx]={nome:n.toUpperCase(), valor:v}; else db.produtos.push({nome:n.toUpperCase(), valor:v}); save(); renderMenuConfig(); }
     });
 }
-
 function showRelatorio(){
     let t = db.vendasDia.reduce((a, b) => a + (b.valor * b.qtd), 0);
     let h = `<div style="text-align:left">`;
@@ -353,7 +391,6 @@ function showRelatorio(){
     h += `<hr><h3>TOTAL: R$ ${t.toFixed(2)}</h3></div>`;
     openM("VENDAS DO DIA", h, null, false);
 }
-
 function clearAll(){ closeM(); openM("RESETAR TUDO?", "Deseja apagar comandas e vendas?", () => { db.comandas=[]; db.vendasDia=[]; db.next=1; save(); renderHome(); }); }
 
 load();

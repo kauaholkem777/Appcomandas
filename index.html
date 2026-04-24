@@ -51,7 +51,6 @@
         .modal-content input { width: 100%; padding: 14px; margin: 8px 0; border-radius: 12px; border: 1px solid #334155; background: #0f172a; color: white; box-sizing: border-box; }
         .btn-menu { width: 100%; height: 48px; margin-bottom: 10px; border-radius: 12px; border: none; font-weight: 800; cursor: pointer; }
 
-        /* IMPRESSÃO TÉRMICA */
         .print-area { background: white; color: black; width: 280px; margin: auto; font-family: 'Courier New', Courier, monospace; padding: 10px; }
         .ticket-header { text-align: center; margin-bottom: 8px; }
         .ticket-id { font-size: 30px; font-weight: 900; margin: 0; }
@@ -146,6 +145,283 @@ let db = {
     next: 1, 
     vendasDia: [], 
     config: { name: "COMANDAPRO", sub: "GESTOR DE VENDAS", logo: "" } 
+};
+
+let btDevice = null;
+let btCharacteristic = null;
+
+// LÓGICA DE CONEXÃO REFORMULADA PARA 5809T / ISC1
+async function conectarBT() {
+    try {
+        btDevice = await navigator.bluetooth.requestDevice({
+            acceptAllDevices: true,
+            optionalServices: [
+                '000018f0-0000-1000-8000-00805f9b34fb', // Padrão MTP
+                '0000ff00-0000-1000-8000-00805f9b34fb', // Padrão ISC1 / 5809T
+                '49535343-fe7d-4158-b296-146748e40a23'  // Alternativo Chinês
+            ]
+        });
+
+        const server = await btDevice.gatt.connect();
+        
+        // Delay estendido para estabilização do hardware chinês
+        await new Promise(resolve => setTimeout(resolve, 1500));
+
+        // Lista de serviços para tentar encontrar o correto
+        const uuids = [
+            '0000ff00-0000-1000-8000-00805f9b34fb',
+            '000018f0-0000-1000-8000-00805f9b34fb',
+            '49535343-fe7d-4158-b296-146748e40a23'
+        ];
+
+        let service = null;
+        for (const uuid of uuids) {
+            try {
+                service = await server.getPrimaryService(uuid);
+                if (service) break;
+            } catch (e) { continue; }
+        }
+
+        if (!service) throw new Error("Serviço de impressão não localizado.");
+
+        const characteristics = await service.getCharacteristics();
+        // Procura a característica de escrita
+        btCharacteristic = characteristics.find(c => 
+            c.properties.write || c.properties.writeWithoutResponse
+        );
+
+        if (btCharacteristic) {
+            document.getElementById('btStatus').innerText = "✅ " + btDevice.name + " CONECTADA";
+            document.getElementById('btStatus').style.color = "#38bdf8";
+            alert("Impressora 5809T pronta!");
+            closeM();
+        } else {
+            throw new Error("Não foi possível habilitar a escrita na impressora.");
+        }
+    } catch (error) {
+        alert("Erro: " + error.message);
+        console.error(error);
+    }
+}
+
+async function enviarParaImpressoraBT() {
+    if (!btCharacteristic) {
+        alert("Impressora não conectada.");
+        return;
+    }
+    
+    const texto = document.getElementById("printArea").innerText;
+    const encoder = new TextEncoder();
+    
+    // Comando ESC/POS Puro: ESC @ (Inicializar) + Texto + 3 pulos de linha
+    const init = new Uint8Array([0x1B, 0x40]);
+    const body = encoder.encode(texto + '\n\n\n\n');
+    
+    try {
+        await btCharacteristic.writeValue(init);
+        await btCharacteristic.writeValue(body);
+    } catch (error) {
+        alert("Erro ao enviar dados. Verifique o pareamento.");
+    }
+}
+
+function save(){ localStorage.setItem("sys_v26_final", JSON.stringify(db)); }
+function load(){
+    const data = JSON.parse(localStorage.getItem("sys_v26_final"));
+    if(data) db = data;
+    updateUI();
+    renderHome();
+}
+
+function updateUI(){
+    document.getElementById('appNameDisplay').innerText = db.config.name;
+    const logoImg = document.getElementById('appLogoMain');
+    if(db.config.logo) { logoImg.src = db.config.logo; logoImg.style.display = 'block'; }
+}
+
+function showScreen(id){
+    document.querySelectorAll('[id^="view"]').forEach(v => v.classList.add('hidden'));
+    document.getElementById(id).classList.remove('hidden');
+    if(id === 'viewHome') renderHome();
+    if(id === 'viewItems') renderAddList();
+    if(id === 'viewMenuConfig') renderMenuConfig();
+}
+
+function closeM(){ document.getElementById("modal").classList.add("hidden"); }
+function openM(title, html, onConfirm, showConfirm = true) {
+    document.getElementById("mTitle").innerText = title;
+    document.getElementById("mBody").innerHTML = html;
+    document.getElementById("modal").classList.remove("hidden");
+    const btn = document.getElementById("mConfirm");
+    if(showConfirm) { btn.classList.remove("hidden"); btn.onclick = () => { if(onConfirm) onConfirm(); closeM(); }; }
+    else btn.classList.add("hidden");
+}
+
+function openSettings(){
+    const html = `
+        <button class="btn-menu" style="background:#2ecc71; color:white" onclick="conectarBT()">🔗 PAREAR 5809T / ISC1</button>
+        <button class="btn-menu" style="background:#38bdf8; color:black" onclick="closeM(); showScreen('viewMenuConfig');">📓 EDITAR CARDÁPIO</button>
+        <button class="btn-menu" style="background:#fff; color:#000" onclick="modalAppEdit()">✏️ EDITAR NOME/LOGO</button>
+        <button class="btn-menu" style="background:#f5d90a; color:black" onclick="showRelatorio()">📊 VENDAS DO DIA</button>
+        <button class="btn-menu" style="background:#ef4444; color:white" onclick="clearAll()">🧹 RESETAR TUDO</button>
+    `;
+    openM("CONFIGURAÇÕES", html, null, false);
+}
+
+function modalAppEdit(){
+    openM("DADOS DA EMPRESA", `
+        <input id="newAN" value="${db.config.name}" placeholder="Nome do Local">
+        <button class="btn-menu" style="background:#fff; color:#000; margin-top:10px" onclick="document.getElementById('logoIn').click()">📷 MUDAR LOGO</button>
+        <input type="file" id="logoIn" class="hidden" onchange="changeLogo(this)">
+    `, () => {
+        db.config.name = document.getElementById('newAN').value;
+        updateUI(); save();
+    });
+}
+
+function changeLogo(input){
+    if (input.files && input.files[0]) {
+        let reader = new FileReader();
+        reader.onload = (e) => { db.config.logo = e.target.result; updateUI(); save(); };
+        reader.readAsDataURL(input.files[0]);
+    }
+}
+
+function renderHome(){
+    const list = document.getElementById("listComandas"); list.innerHTML = "";
+    db.comandas.forEach((c, i) => {
+        let t = c.itens.reduce((acc, it) => acc + (it.valor * it.qtd), 0);
+        list.innerHTML += `<div class="card">
+            <div onclick="openOrder(${i})" style="flex:1">
+                <small style="color:var(--primary)">P-Nº ${c.numero}</small><br><b>${c.nome}</b>
+            </div>
+            <div style="display:flex; gap:10px; align-items:center">
+                <b>R$ ${t.toFixed(2)}</b>
+                <button class="btn-icon" onclick="modalName(${i})">✏️</button>
+            </div>
+        </div>`;
+    });
+}
+
+function modalName(idx = null){
+    const nome = idx !== null ? db.comandas[idx].nome : "";
+    openM(idx !== null ? "EDITAR" : "NOVA COMANDA", `<input id="inNome" value="${nome}" placeholder="Nome do cliente">`, () => {
+        let n = document.getElementById("inNome").value; if(!n) return;
+        if(idx !== null) db.comandas[idx].nome = n;
+        else db.comandas.push({ nome: n, numero: String(db.next++).padStart(3,'0'), itens: [] });
+        save(); renderHome();
+    });
+}
+
+function openOrder(i){ cur = i; showScreen('viewOrder'); document.getElementById("titleOrder").innerText = db.comandas[i].nome; renderOrder(); }
+function renderOrder(){
+    let c = db.comandas[cur], ped = document.getElementById("listOrder"), total = 0; ped.innerHTML = "";
+    c.itens.forEach((it, i) => {
+        total += it.valor * it.qtd;
+        ped.innerHTML += `<div class="card">
+            <div style="flex:1"><b>${it.qtd}x ${it.nome}</b><br><small style="color:var(--primary)">${it.obs || ""}</small></div>
+            <div style="display:flex; gap:5px">
+                <button class="btn-icon" onclick="qtdChange(${i},1)">+</button>
+                <button class="btn-icon" onclick="qtdChange(${i},-1)">-</button>
+                <button class="btn-icon" onclick="modalObs(${i})">💬</button>
+            </div>
+        </div>`;
+    });
+    document.getElementById("valTotal").innerText = total.toFixed(2);
+}
+
+function qtdChange(i, n){ db.comandas[cur].itens[i].qtd += n; if(db.comandas[cur].itens[i].qtd <= 0) db.comandas[cur].itens.splice(i,1); save(); renderOrder(); }
+function modalObs(idx){ openM("OBS", `<input id="inObs" value="${db.comandas[cur].itens[idx].obs || ''}">`, () => { db.comandas[cur].itens[idx].obs = document.getElementById("inObs").value; save(); renderOrder(); }); }
+
+function renderAddList(){
+    const lp = document.getElementById("listItems"); lp.innerHTML = "";
+    db.produtos.forEach((p, i) => { lp.innerHTML += `<div class="card" onclick="addItem(${i})"><b>${p.nome}</b> <b>R$ ${p.valor.toFixed(2)}</b></div>`; });
+}
+function addItem(i){ db.comandas[cur].itens.push({...db.produtos[i], qtd:1, obs:""}); save(); showScreen('viewOrder'); renderOrder(); }
+
+function modalPrint(){
+    openM("FINALIZAR", `
+        <input type="number" id="taxaEnt" placeholder="Taxa de Entrega" value="0">
+        <button class="btn-menu" style="background:var(--primary); color:black" onclick="genTicket('PARA COMER AQUI')">PARA COMER AQUI</button>
+        <button class="btn-menu" style="background:var(--accent); color:black" onclick="genTicket('PARA LEVAR')">PARA LEVAR</button>
+    `, null, false);
+}
+
+function genTicket(modo){
+    const taxa = parseFloat(document.getElementById('taxaEnt').value) || 0;
+    const agora = new Date().toLocaleString('pt-BR');
+    closeM(); 
+    let c = db.comandas[cur], tot = 0, cozHtml = "", cliHtml = "";
+    
+    c.itens.forEach(it => { 
+        tot += it.valor * it.qtd;
+        db.vendasDia.push({...it});
+        cozHtml += `<div class="item-pista">${it.qtd}x ${it.nome} ${it.obs ? `<span class="obs-box">OBS: ${it.obs.toUpperCase()}</span>` : ""}</div>`;
+        cliHtml += `<div style="display:flex; justify-content:space-between"><span>${it.qtd}x ${it.nome}</span><span>R$ ${(it.valor * it.qtd).toFixed(2)}</span></div>`;
+    });
+
+    document.getElementById("printArea").innerHTML = `
+        <div class="ticket-cozinha">
+            <div class="ticket-header">
+                <p class="ticket-id">P-Nº ${c.numero}</p>
+                <p class="ticket-client-name">NOME: ${c.nome}</p>
+                <div style="border: 1px solid #000; font-weight: bold;">${modo}</div>
+            </div>
+            ${cozHtml}
+            <div style="text-align:right; font-size:18px; margin-top:15px; border-top: 1px solid #000;">
+                <b>TOTAL: R$ ${(tot+taxa).toFixed(2)}</b>
+            </div>
+        </div>
+        <div class="ticket-cliente">
+            <div style="text-align:center">
+                <b style="font-size:18px">${db.config.name}</b><br>
+                <span>${agora}</span>
+            </div>
+            <div style="margin:10px 0; border-bottom:1px dashed #000"></div>
+            ${cliHtml}
+            <div style="text-align:right; margin-top:10px; border-top:1px solid #eee; padding-top:5px;">
+                <b style="font-size:18px">TOTAL: R$ ${(tot+taxa).toFixed(2)}</b>
+            </div>
+        </div>
+    `;
+    save(); showScreen('viewPrint');
+}
+
+function renderMenuConfig(){
+    const list = document.getElementById("listMenuConfig"); list.innerHTML = "";
+    db.produtos.forEach((p, i) => {
+        list.innerHTML += `<div class="card">
+            <div style="flex:1"><b>${p.nome}</b><br><small>R$ ${p.valor.toFixed(2)}</small></div>
+            <div style="display:flex; gap:10px">
+                <button class="btn-icon" onclick="modalProduct(${i})">✏️</button>
+                <button class="btn-icon" style="color:#ef4444" onclick="db.produtos.splice(${i},1); save(); renderMenuConfig();">🗑️</button>
+            </div>
+        </div>`;
+    });
+}
+
+function modalProduct(idx = null){
+    const p = idx !== null ? db.produtos[idx] : {nome:"", valor:""};
+    openM("PRODUTO", `<input id="pN" value="${p.nome}" placeholder="Nome"><input id="pV" type="number" value="${p.valor}" placeholder="Preço">`, () => {
+        let n = document.getElementById("pN").value; let v = parseFloat(document.getElementById("pV").value);
+        if(n && v){ if(idx!==null) db.produtos[idx]={nome:n.toUpperCase(), valor:v}; else db.produtos.push({nome:n.toUpperCase(), valor:v}); save(); renderMenuConfig(); }
+    });
+}
+
+function showRelatorio(){
+    let t = db.vendasDia.reduce((a, b) => a + (b.valor * b.qtd), 0);
+    let h = `<div style="text-align:left">`;
+    db.vendasDia.forEach(v => h += `<p>${v.qtd}x ${v.nome} - R$ ${(v.valor*v.qtd).toFixed(2)}</p>`);
+    h += `<hr><h3>TOTAL: R$ ${t.toFixed(2)}</h3></div>`;
+    openM("VENDAS DO DIA", h, null, false);
+}
+
+function clearAll(){ closeM(); openM("RESETAR TUDO?", "Deseja apagar comandas e vendas?", () => { db.comandas=[]; db.vendasDia=[]; db.next=1; save(); renderHome(); }); }
+
+load();
+</script>
+</body>
+</html>
 };
 
 let btDevice = null;
